@@ -1,0 +1,44 @@
+global:
+  scrape_interval: 30s
+
+scrape_configs:
+  - job_name: 'vmagent'
+    static_configs:
+      - targets: ['vmagent:8429']
+        labels:
+          retention: '6mo'
+  - job_name: 'vmalert'
+    static_configs:
+      - targets: ['vmalert:8880']
+        labels:
+          retention: '6mo'
+  - job_name: 'vminsert'
+    static_configs:
+      - targets: ['vminsert-30d:8480', 'vminsert-6mo:8480', 'vminsert-infd:8480']
+        labels:
+          retention: '6mo'
+  - job_name: 'vmselect'
+    static_configs:
+      - targets: ['vmselect:8481']
+        labels:
+          retention: '6mo'
+  - job_name: 'vmstorage'
+    static_configs:
+      - targets: ['vmstorage-30d:8482', 'vmstorage-6mo:8482', 'vmstorage-infd:8482']
+        labels:
+          retention: '6mo'
+  - job_name: 'vmlogs'
+    static_configs:
+      - targets: ['victorialogs:9428']
+        labels:
+          retention: '6mo'
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+        labels:
+          retention: '6mo'
+  - job_name: 'vmauth'
+    static_configs:
+      - targets: ['vmauth:8427']
+        labels:
+          retention: '6mo'

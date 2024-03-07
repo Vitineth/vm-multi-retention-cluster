@@ -1,0 +1,4 @@
+*.pem
+*.env
+temp/
+victoriametrics-deployment.zip

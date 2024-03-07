@@ -1,0 +1,8 @@
+route:
+  receiver: notifier
+
+receivers:
+  - name: notifier
+    webhook_configs:
+      - url: "http://127.0.0.1:7514/alerts"
+        send_resolved: true

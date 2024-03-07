@@ -1,0 +1,10 @@
+unauthorized_user:
+  url_map:
+  - src_paths:
+    - "/api/v1/write(/.*)?"
+    url_prefix:
+    - "http://vmagent:8429/"
+  - src_paths:
+    - "/select/.+"
+    url_prefix:
+    - "http://vmselect:8481/"

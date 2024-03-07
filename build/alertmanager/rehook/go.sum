@@ -1,0 +1,4 @@
+github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+gitlab.com/vitineth/xiomi-notifier-lib/go v0.0.0-20240220151005-4c25d70a77a0 h1:z2ICrTmwyx4/0+bmDJRxUfr2WWhTX82cWY9HOnaeCoQ=
+gitlab.com/vitineth/xiomi-notifier-lib/go v0.0.0-20240220151005-4c25d70a77a0/go.mod h1:lgqEzmV3oiSB2XK8Yha2QMeJHwGGiZPkl3yu2D+gvPA=

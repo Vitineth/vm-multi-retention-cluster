@@ -1,0 +1,258 @@
+version: "3.8"
+services:
+    # Storage Nodes
+    vmstorage-30d:
+      image: victoriametrics/vmstorage:v1.93.11-cluster
+      command:
+        - "-retentionPeriod=30d"
+        - "-storageDataPath=/storage"
+      expose:
+        - 8400
+      networks:
+        - vm_net
+      volumes:
+        - /home/ryan/dev/scratch/victoria-metrics/temp/vmstorage-30d-storage:/storage
+      restart: always
+      labels:
+        "docker_compose_diagram.cluster": "storage"
+    
+    vmstorage-6mo:
+      image: victoriametrics/vmstorage:v1.93.11-cluster
+      command:
+        - "-retentionPeriod=90d"
+        - "-storageDataPath=/storage"
+      expose:
+        - 8400
+      networks:
+        - vm_net
+      volumes:
+        - /home/ryan/dev/scratch/victoria-metrics/temp/vmstorage-6mo-storage:/storage
+      restart: always
+      labels:
+        "docker_compose_diagram.cluster": "storage"
+
+    vmstorage-infd:
+      image: victoriametrics/vmstorage:v1.93.11-cluster
+      command:
+        - "-retentionPeriod=100y"
+        - "-storageDataPath=/storage"
+      expose:
+        - 8400
+      networks:
+        - vm_net
+      volumes:
+        - /home/ryan/dev/scratch/victoria-metrics/temp/vmstorage-infd-storage:/storage
+      restart: always
+      labels:
+        "docker_compose_diagram.cluster": "storage"
+
+    # Insertion Nodes
+    vminsert-30d:
+      image: victoriametrics/vminsert:v1.93.11-cluster
+      depends_on:
+        - vmstorage-30d
+      command:
+        - "-storageNode=\"vmstorage-30d:8400\""
+      expose:
+        - 8480
+      networks:
+        - vm_net
+      restart: always
+      labels:
+        "docker_compose_diagram.cluster": "insertion"
+    
+    vminsert-6mo:
+      image: victoriametrics/vminsert:v1.93.11-cluster
+      depends_on:
+        - vmstorage-6mo
+      command:
+        - "-storageNode=vmstorage-6mo"
+      expose:
+        - 8480
+      networks:
+        - vm_net
+      restart: always
+      labels:
+        "docker_compose_diagram.cluster": "insertion"
+    
+    vminsert-infd:
+      image: victoriametrics/vminsert:v1.93.11-cluster
+      depends_on:
+        - vmstorage-infd
+      command:
+        - "-storageNode=vmstorage-infd"
+      expose:
+        - 8480
+      networks:
+        - vm_net
+      restart: always
+      labels:
+        "docker_compose_diagram.cluster": "insertion"
+
+    # Agent
+    vmagent:
+      image: victoriametrics/vmagent:v1.93.11
+      depends_on:
+        - vminsert-30d
+        - vminsert-6mo
+        - vminsert-infd
+      ports:
+        - 8429:8429
+      expose:
+        - 8429
+      command:
+        - "--promscrape.config=/etc/prometheus/prometheus.yml"
+        - "-remoteWrite.showURL"
+        - "-remoteWrite.url=http://vminsert-30d:8480/insert/0/prometheus/api/v1/write"
+        - "-remoteWrite.urlRelabelConfig=/conf/30d-rewrite.conf"
+        - "-remoteWrite.url=http://vminsert-6mo:8480/insert/0/prometheus/api/v1/write"
+        - "-remoteWrite.urlRelabelConfig=/conf/6mo-rewrite.conf"
+        - "-remoteWrite.url=http://vminsert-infd:8480/insert/0/prometheus/api/v1/write"
+        - "-remoteWrite.urlRelabelConfig=/conf/infd-rewrite.conf"
+      networks:
+        - vm_net
+      volumes:
+        - ./config/vmagent/cluster-metric-ingestion.yml:/etc/prometheus/prometheus.yml
+        - ./config/vmagent/conf:/conf
+      restart: always
+      labels:
+        "docker_compose_diagram.cluster": "insertion"
+
+    # Select
+    vmselect:
+      image: victoriametrics/vmselect:v1.93.11-cluster
+      depends_on:
+        - vmstorage-30d
+        - vmstorage-6mo
+        - vmstorage-infd
+      command:
+        - "-storageNode=vmstorage-30d"
+        - "-storageNode=vmstorage-6mo"
+        - "-storageNode=vmstorage-infd"
+      ports:
+        - "8481:8481"
+      expose:
+        - 8481
+      networks:
+        - vm_net
+      restart: always
+      labels:
+        "docker_compose_diagram.cluster": "selection"
+
+    # Alerting
+    vmalert:
+      image: victoriametrics/vmalert:v1.97.1
+      depends_on:
+        - "vmstorage-30d"
+        - "vmstorage-6mo"
+        - "vmstorage-infd"
+        - "vmagent"
+        - "alertmanager"
+      ports:
+        - 8880:8880
+      volumes:
+        - ./config/vmalert/alerts:/etc/alerts
+      command:
+        - "--datasource.url=http://vmauth:8427/select/0/prometheus/"
+        - "--remoteRead.url=http://vmauth:8427/select/0/prometheus/"
+        - "--remoteWrite.url=http://vminsert-6mo:8480/insert/0/prometheus/"
+        - "--notifier.url=http://alertmanager:9093/"
+        - "--rule=/etc/alerts/*.yml"
+        - "--external.url=http://172.0.0.1:3000"
+        - '--external.alert.source=explore?orgId=1&left={"datasource":"VictoriaMetrics","queries":[{"expr":{{$$expr|jsonEscape|queryEscape}},"refId":"A"}],"range":{"from":"now-1h","to":"now"}}'
+      networks:
+        - vm_net
+      restart: always
+      labels:
+        "docker_compose_diagram.cluster": "alerting"
+
+    alertmanager:
+      # image: prom/alertmanager:v0.27.0
+      build:
+        context: ./build/alertmanager
+        dockerfile: alertmanager.Dockerfile
+      ports:
+        - 9093:9093
+      volumes:
+        - ./config/alertmanager/alertmanager.yml:/config/alertmanager.yml
+        - ./config/alertmanager/rehook.pem:/config/rehook.pem
+      networks:
+        - vm_net
+      env_file:
+        - ./build/alertmanager/rehook.env
+      restart: always
+      labels:
+        "docker_compose_diagram.cluster": "alerting"
+
+    # Grafana
+    grafana:
+      build:
+        context: ./build/grafana
+        dockerfile: grafana.Dockerfile
+      depends_on:
+        - "vmagent"
+        - "vmselect"
+        - "victorialogs"
+      ports:
+        - 3000:3000
+      restart: always
+      command: [ "chmod +x /download.sh && /download.sh && /run.sh" ]
+      volumes:
+        - grafana_data:/var/lib/grafana
+        - ./config/grafana/provisioning:/etc/grafana/provisioning
+        - ./config/grafana/dashboards:/var/lib/grafana/dashboards
+        - ./config/grafana/grafana.ini:/etc/grafana/grafana.ini
+      networks:
+        - vm_net
+      labels:
+        "docker_compose_diagram.cluster": "interface"
+
+    # Logging
+    fluentbit:
+      image: cr.fluentbit.io/fluent/fluent-bit:2.1.4
+      volumes:
+        - /var/lib/docker/containers:/var/lib/docker/containers:ro
+        - ./config/logs/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
+      depends_on: [victorialogs]
+      ports:
+        - "5140:5140"
+      networks:
+        - vm_net
+      labels:
+        "docker_compose_diagram.cluster": "logging"
+
+    victorialogs:
+      image: docker.io/victoriametrics/victoria-logs:v0.5.0-victorialogs
+      command:
+        - "--storageDataPath=/vlogs"
+        - "--httpListenAddr=:9428"
+      volumes:
+        - /home/ryan/dev/scratch/victoria-metrics/temp/vmlogs-storage:/vlogs
+      ports:
+        - "9428:9428"
+      networks:
+        - vm_net
+      labels:
+        "docker_compose_diagram.cluster": "logging"
+
+    # Routing
+    vmauth:
+      image: victoriametrics/vmauth:v1.99.0
+      depends_on:
+        - vmagent
+        - vmselect
+      command:
+        - "--auth.config=/etc/auth.yml"
+      volumes:
+        - ./config/vmauth/auth.yml:/etc/auth.yml
+      ports:
+        - 8427:8427
+      networks:
+        - vm_net
+      labels:
+        "docker_compose_diagram.cluster": "interface"
+
+networks:
+  vm_net:
+volumes:
+  grafana_data:
